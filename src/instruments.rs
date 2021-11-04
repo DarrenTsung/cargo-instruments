@@ -28,22 +28,34 @@ impl XcodeInstruments {
         let cur_version = get_macos_version()?;
         let macos_xctrace_version = Version::parse("10.15.0").unwrap();
 
-        if cur_version >= macos_xctrace_version {
-            // This is the check used by Homebrew,see
-            // https://github.com/Homebrew/install/blob/a1d820fc8950312c35073700d0ea88a531bc5950/install.sh#L216
-            let clt_git_filepath = Path::new("/Library/Developer/CommandLineTools/usr/bin/git");
-            if clt_git_filepath.exists() {
-                return Ok(XcodeInstruments::XcTrace);
-            }
-        } else {
-            let instruments_app_filepath = Path::new("/usr/bin/instruments");
-            if instruments_app_filepath.exists() {
-                return Ok(XcodeInstruments::InstrumentsBinary);
-            }
+        if cur_version >= macos_xctrace_version && Self::check_xctrace_available() {
+            return Ok(XcodeInstruments::XcTrace);
         }
+
+        let instruments_app_filepath = Path::new("/usr/bin/instruments");
+        if instruments_app_filepath.exists() {
+            return Ok(XcodeInstruments::InstrumentsBinary);
+        }
+
         Err(anyhow!(
             "Xcode Instruments is not installed. Please install the Xcode Command Line Tools."
         ))
+    }
+
+    fn check_xctrace_available() -> bool {
+        // This is the check used by Homebrew,see
+        // https://github.com/Homebrew/install/blob/a1d820fc8950312c35073700d0ea88a531bc5950/install.sh#L216
+        let clt_git_filepath = Path::new("/Library/Developer/CommandLineTools/usr/bin/git");
+        if !clt_git_filepath.exists() {
+            return false;
+        }
+
+        let mut command = Command::new("xcrun");
+        command.args(&["xctrace", "--version"]);
+        match command.output() {
+            Ok(output) => output.status.success(),
+            Err(_) => false,
+        }
     }
 
     /// Return a catalog of available Instruments Templates.
